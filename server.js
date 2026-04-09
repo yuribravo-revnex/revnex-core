@@ -7,6 +7,11 @@ app.use(express.json());
 const API_URL = process.env.EVOLUTION_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 
+// ✅ ROTA RAIZ (FIX)
+app.get("/", (req, res) => {
+  res.send("Revnex Core OK 🚀");
+});
+
 app.post("/create-instance", async (req, res) => {
   try {
     const { name } = req.body;
