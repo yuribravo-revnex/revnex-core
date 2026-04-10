@@ -7,7 +7,7 @@ app.use(express.json());
 const API_URL = process.env.EVOLUTION_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 
-// 🔹 Rota raiz
+// 🔹 Health check
 app.get("/", (req, res) => {
   res.send("Revnex Core ONLINE 🚀");
 });
@@ -34,6 +34,7 @@ app.post("/create-instance", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
+    console.error(err.response?.data || err.message);
     res.status(500).json(err.response?.data || err.message);
   }
 });
@@ -54,35 +55,48 @@ app.get("/qr/:name", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
+    console.error(err.response?.data || err.message);
     res.status(500).json(err.response?.data || err.message);
   }
 });
 
-// 🔥 WEBHOOK (CÉREBRO DO BOT)
+// 🔥 WEBHOOK PRINCIPAL (RECEBE + RESPONDE)
 app.post("/webhook", async (req, res) => {
   try {
     console.log("📩 Evento recebido:", JSON.stringify(req.body, null, 2));
 
     const data = req.body;
 
-    // 🔹 pega dados básicos
-    const instance = data.instance;
-    const message = data.data?.message?.conversation || data.data?.message?.extendedTextMessage?.text;
+    // 🔹 pega instance corretamente
+    const instance =
+      data.instance ||
+      data.instanceName ||
+      data.instance?.instanceName;
+
+    // 🔹 pega remetente
     const from = data.data?.key?.remoteJid;
 
-    // 🔥 ignora mensagens inválidas
-    if (!message || !from) {
+    // 🔹 pega mensagem (texto simples + extended)
+    const message =
+      data.data?.message?.conversation ||
+      data.data?.message?.extendedTextMessage?.text;
+
+    // 🔹 ignora eventos inúteis
+    if (!message || !from || !instance) {
       return res.sendStatus(200);
     }
 
-    console.log(`📨 Mensagem de ${from}: ${message}`);
+    // 🔹 limpa número
+    const number = from.replace("@s.whatsapp.net", "");
 
-    // 🔥 RESPOSTA AUTOMÁTICA (primeira versão)
+    console.log(`📨 ${number}: ${message}`);
+
+    // 🔥 RESPOSTA AUTOMÁTICA
     await axios.post(
       `${API_URL}/message/sendText/${instance}`,
       {
-        number: from,
-        text: `Recebi sua mensagem: "${message}" 🚀`
+        number,
+        text: `Recebi: ${message} 🚀`
       },
       {
         headers: {
