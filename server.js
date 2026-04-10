@@ -7,28 +7,24 @@ app.use(express.json());
 const API_URL = process.env.EVOLUTION_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 
-// =========================
-// ROOT
-// =========================
+/**
+ * ✅ ROTA RAIZ
+ */
 app.get("/", (req, res) => {
   res.send("Revnex Core OK 🚀");
 });
 
-// =========================
-// CREATE INSTANCE
-// =========================
+/**
+ * ✅ CRIAR INSTÂNCIA
+ */
 app.post("/create-instance", async (req, res) => {
   try {
-    const { instanceName } = req.body;
-
-    if (!instanceName) {
-      return res.status(400).json({ error: "instanceName is required" });
-    }
+    const { name } = req.body;
 
     const response = await axios.post(
       `${API_URL}/instance/create`,
       {
-        instanceName,
+        instanceName: name,
         integration: "WHATSAPP-BAILEYS",
         qrcode: true
       },
@@ -41,15 +37,15 @@ app.post("/create-instance", async (req, res) => {
     );
 
     res.json(response.data);
-
   } catch (err) {
+    console.error(err.response?.data || err.message);
     res.status(500).json(err.response?.data || err.message);
   }
 });
 
-// =========================
-// GET QR
-// =========================
+/**
+ * ✅ PEGAR QR CODE
+ */
 app.get("/qr/:name", async (req, res) => {
   try {
     const { name } = req.params;
@@ -64,127 +60,67 @@ app.get("/qr/:name", async (req, res) => {
     );
 
     res.json(response.data);
-
   } catch (err) {
+    console.error(err.response?.data || err.message);
     res.status(500).json(err.response?.data || err.message);
   }
 });
 
-// =========================
-// SEND MESSAGE
-// =========================
-app.post("/send-message", async (req, res) => {
-  try {
-    const { instanceName, number, text } = req.body;
-
-    if (!instanceName || !number || !text) {
-      return res.status(400).json({ error: "missing fields" });
-    }
-
-    const response = await axios.post(
-      `${API_URL}/message/sendText/${instanceName}`,
-      {
-        number,
-        text
-      },
-      {
-        headers: {
-          apikey: API_KEY,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    res.json(response.data);
-
-  } catch (err) {
-    res.status(500).json(err.response?.data || err.message);
-  }
-});
-
-// =========================
-// SIMPLE CONVERSION ENGINE
-// =========================
-function generateReply(message) {
-  const text = message.toLowerCase();
-
-  if (text.includes("oi") || text.includes("olá")) {
-    return `Olá! Aqui é o time Revnex.
-
-Me diga o que você quer:
-1 - Ver veículos disponíveis
-2 - Falar com vendedor
-3 - Saber preços`;
-  }
-
-  if (text === "1") {
-    return `Perfeito.
-
-Temos veículos disponíveis hoje.
-
-Quer:
-1 - Carros até 30k
-2 - Carros até 60k
-3 - Carros premium`;
-  }
-
-  if (text === "2") {
-    return `Estou te conectando com um vendedor agora.`;
-  }
-
-  if (text === "3") {
-    return `Temos opções a partir de R$29.900.
-
-Quer ver modelos disponíveis?`;
-  }
-
-  return `Não entendi.
-
-Digite:
-1 - veículos
-2 - vendedor
-3 - preços`;
-}
-
-// =========================
-// WEBHOOK (RECEBER MENSAGENS)
-// =========================
+/**
+ * 🚀 WEBHOOK (O CORAÇÃO DO SISTEMA)
+ */
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("Webhook recebido:", JSON.stringify(req.body, null, 2));
+    console.log("📩 WEBHOOK RECEBIDO:");
+    console.log(JSON.stringify(req.body, null, 2));
 
-    const instanceName = req.body.instance;
-    const message = req.body?.data?.message?.conversation;
-    const number = req.body?.data?.key?.remoteJid;
+    const event = req.body?.event;
+    const data = req.body?.data;
 
-    if (!message || !number) {
-      return res.sendStatus(200);
+    // 👉 Filtra só mensagens reais
+    if (event === "messages.upsert") {
+      const message = data?.messages?.[0];
+
+      if (!message) {
+        return res.sendStatus(200);
+      }
+
+      const from = message.key.remoteJid;
+      const text =
+        message.message?.conversation ||
+        message.message?.extendedTextMessage?.text;
+
+      console.log("👤 De:", from);
+      console.log("💬 Mensagem:", text);
+
+      // ⚡ RESPOSTA SIMPLES (TESTE)
+      if (text) {
+        await axios.post(
+          `${API_URL}/message/sendText/${data.instanceName}`,
+          {
+            number: from,
+            text: `Recebi sua mensagem: ${text}`
+          },
+          {
+            headers: {
+              apikey: API_KEY,
+              "Content-Type": "application/json"
+            }
+          }
+        );
+      }
     }
 
-    const reply = generateReply(message);
-
-    await axios.post(
-      `${API_URL}/message/sendText/${instanceName}`,
-      {
-        number,
-        text: reply
-      },
-      {
-        headers: {
-          apikey: API_KEY,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
     res.sendStatus(200);
-
   } catch (err) {
-    console.error(err);
-    res.sendStatus(500);
+    console.error("Erro no webhook:", err.message);
+    res.sendStatus(200);
   }
 });
 
+/**
+ * 🚀 START SERVER
+ */
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Revnex Core rodando 🚀");
+  console.log("🚀 Revnex Core rodando");
 });
