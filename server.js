@@ -5,76 +5,81 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// =============================
-// CONFIG
-// =============================
 const EVOLUTION_URL = "https://evolution-api-production-a3c6.up.railway.app";
 const EVOLUTION_API_KEY = "302b7b6bca698a46e7347ecc0a82adb7dcc3ce255936799f5f2f9ee2922f1ac6";
 
-// 🔥 INSTÂNCIA FIXA (CORREÇÃO CRÍTICA)
 const INSTANCE_NAME = "cliente4";
 
-// =============================
-// HEALTH CHECK
+// 🧠 MEMÓRIA TEMPORÁRIA (sessão)
+const sessions = {};
+
 // =============================
 app.get("/", (req, res) => {
   res.send("🔥 Revnex Core rodando");
 });
 
 // =============================
-// WEBHOOK
-// =============================
 app.post("/webhook", async (req, res) => {
   try {
     const data = req.body;
 
-    console.log("📩 WEBHOOK RECEBIDO:");
-    console.log(JSON.stringify(data, null, 2));
-
     const message = data?.data?.message;
     const from = data?.data?.key?.remoteJid;
 
-    if (!message || !from) {
-      console.log("⚠️ Dados inválidos");
-      return res.sendStatus(200);
-    }
+    if (!message || !from) return res.sendStatus(200);
+    if (from.includes("@g.us")) return res.sendStatus(200);
 
-    // ignora grupos
-    if (from.includes("@g.us")) {
-      console.log("⚠️ Grupo ignorado");
-      return res.sendStatus(200);
-    }
+    const number = from.replace("@s.whatsapp.net", "");
 
     const text =
       message?.conversation ||
       message?.extendedTextMessage?.text ||
       "";
 
-    console.log("💬 Mensagem:", text);
-    console.log("📱 De:", from);
-    console.log("🔗 Instância:", INSTANCE_NAME);
-
     if (!text) return res.sendStatus(200);
 
+    console.log("👤", number, "→", text);
+
     // =============================
-    // LÓGICA DO BOT
+    // ESTADO ATUAL
     // =============================
+    const state = sessions[number] || "inicio";
+
     let resposta = "";
 
-    if (text.toLowerCase() === "oi") {
+    // =============================
+    // FLUXO
+    // =============================
+
+    if (text.toLowerCase() === "oi" && state === "inicio") {
       resposta = `Olá! Aqui é a Vitrin Veículos.
 
 1 - Comprar carro
 2 - Vender carro`;
-    } else if (text === "1") {
-      resposta = "Qual faixa de valor você procura?";
-    } else if (text === "2") {
-      resposta = "Perfeito. Vamos anunciar seu veículo.";
-    } else {
-      resposta = "Digite 1 para comprar ou 2 para vender.";
+
+      sessions[number] = "menu";
     }
 
-    console.log("📤 Enviando resposta...");
+    else if (text === "1" && state === "menu") {
+      resposta = "Qual faixa de valor você procura?";
+      sessions[number] = "comprar_valor";
+    }
+
+    else if (text === "2" && state === "menu") {
+      resposta = "Perfeito. Vamos anunciar seu veículo.";
+      sessions[number] = "vender";
+    }
+
+    else if (state === "comprar_valor") {
+      resposta = "Perfeito. Um consultor vai falar com você 🚗";
+      sessions[number] = "finalizado";
+    }
+
+    else {
+      resposta = "Digite 'oi' para começar.";
+    }
+
+    console.log("📤", resposta);
 
     await fetch(`${EVOLUTION_URL}/message/sendText/${INSTANCE_NAME}`, {
       method: "POST",
@@ -83,12 +88,10 @@ app.post("/webhook", async (req, res) => {
         apikey: EVOLUTION_API_KEY,
       },
       body: JSON.stringify({
-        number: from.replace("@s.whatsapp.net", ""),
+        number,
         text: resposta,
       }),
     });
-
-    console.log("✅ Resposta enviada");
 
     res.sendStatus(200);
   } catch (error) {
@@ -97,7 +100,6 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// =============================
 app.listen(PORT, () => {
   console.log(`🔥 Revnex Core rodando na porta ${PORT}`);
 });
