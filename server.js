@@ -10,7 +10,6 @@ const EVOLUTION_API_KEY = "302b7b6bca698a46e7347ecc0a82adb7dcc3ce255936799f5f2f9
 
 const INSTANCE_NAME = "cliente4";
 
-// 🧠 MEMÓRIA TEMPORÁRIA (sessão)
 const sessions = {};
 
 // =============================
@@ -40,18 +39,16 @@ app.post("/webhook", async (req, res) => {
 
     console.log("👤", number, "→", text);
 
-    // =============================
-    // ESTADO ATUAL
-    // =============================
     const state = sessions[number] || "inicio";
 
     let resposta = "";
 
     // =============================
-    // FLUXO
+    // FLUXO INTELIGENTE
     // =============================
 
-    if (text.toLowerCase() === "oi" && state === "inicio") {
+    // INÍCIO
+    if (text.toLowerCase() === "oi") {
       resposta = `Olá! Aqui é a Vitrin Veículos.
 
 1 - Comprar carro
@@ -60,23 +57,27 @@ app.post("/webhook", async (req, res) => {
       sessions[number] = "menu";
     }
 
-    else if (text === "1" && state === "menu") {
+    // MENU
+    else if (text === "1") {
       resposta = "Qual faixa de valor você procura?";
       sessions[number] = "comprar_valor";
     }
 
-    else if (text === "2" && state === "menu") {
+    else if (text === "2") {
       resposta = "Perfeito. Vamos anunciar seu veículo.";
       sessions[number] = "vender";
     }
 
+    // CAPTURA DE VALOR (QUALQUER TEXTO)
     else if (state === "comprar_valor") {
       resposta = "Perfeito. Um consultor vai falar com você 🚗";
       sessions[number] = "finalizado";
     }
 
+    // FALLBACK
     else {
       resposta = "Digite 'oi' para começar.";
+      sessions[number] = "inicio";
     }
 
     console.log("📤", resposta);
