@@ -7,38 +7,40 @@ app.use(express.json());
 const API_URL = process.env.EVOLUTION_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 
-// memória temporária (depois vira DB)
+// 🔥 SIMULAÇÃO DE BANCO (depois vira Supabase)
+const flows = {
+  vitrin: {
+    start: {
+      message: `Olá! Aqui é a Vitrin Veículos.
+
+1 - Comprar carro
+2 - Vender carro`,
+      options: {
+        "1": "buy",
+        "2": "sell"
+      }
+    },
+    buy: {
+      message: "Qual faixa de valor você procura?",
+      next: "lead"
+    },
+    sell: {
+      message: "Qual carro você quer vender?",
+      next: "lead"
+    },
+    lead: {
+      message: "Perfeito. Um consultor vai falar com você 🚗",
+      next: null
+    }
+  }
+};
+
+// sessões (depois vira banco)
 const sessions = {};
-const leads = [];
 
 // ROOT
 app.get("/", (req, res) => {
-  res.send("Revnex Core OK 🚀");
-});
-
-// CRIAR INSTÂNCIA
-app.post("/create-instance", async (req, res) => {
-  try {
-    const { name } = req.body;
-
-    const response = await axios.post(
-      `${API_URL}/instance/create`,
-      {
-        instanceName: name,
-        integration: "WHATSAPP-BAILEYS",
-        qrcode: true
-      },
-      {
-        headers: {
-          apikey: API_KEY
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json(err.response?.data || err.message);
-  }
+  res.send("Revnex Engine ON 🚀");
 });
 
 // WEBHOOK
@@ -50,75 +52,51 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    const number = data.data.key.remoteJid;
-    const message = data.data.message?.conversation?.toLowerCase() || "";
     const instance = data.instance;
+    const from = data.data.key.remoteJid;
+    const number = from.replace("@s.whatsapp.net", "");
+    const message =
+      data.data.message?.conversation?.toLowerCase() || "";
 
     console.log("📩", number, message);
 
-    // iniciar sessão
+    // inicia sessão
     if (!sessions[number]) {
       sessions[number] = { step: "start" };
     }
 
     const state = sessions[number];
-    let response = "";
+    const flow = flows.vitrin;
+    let step = flow[state.step];
 
-    // FLUXO
-    if (state.step === "start") {
-      response = `Olá! Aqui é a Vitrin Veículos.
+    let nextStep = null;
 
-1 - Comprar carro
-2 - Vender carro
-3 - Atendente`;
-
-      state.step = "menu";
+    // 🔹 verifica opções
+    if (step.options && step.options[message]) {
+      nextStep = step.options[message];
     }
 
-    else if (state.step === "menu") {
-      if (message.includes("1")) {
-        response = "Qual faixa de valor?";
-        state.step = "buy";
-      } 
-      else if (message.includes("2")) {
-        response = "Qual carro você quer vender?";
-        state.step = "sell";
-      } 
-      else {
-        response = "Escolha 1, 2 ou 3";
-      }
+    // 🔹 fallback para next automático
+    else if (step.next) {
+      nextStep = step.next;
     }
 
-    else if (state.step === "buy") {
-      leads.push({
-        number,
-        interest: "buy",
-        message,
-        instance
-      });
-
-      response = "Perfeito. Um consultor vai falar com você 🚗";
-      state.step = "done";
+    // 🔹 se nada casar
+    else {
+      nextStep = "start";
     }
 
-    else if (state.step === "sell") {
-      leads.push({
-        number,
-        interest: "sell",
-        message,
-        instance
-      });
+    const next = flow[nextStep];
 
-      response = "Recebido. Vamos te ajudar a vender 🚗";
-      state.step = "done";
-    }
+    // atualiza estado
+    state.step = nextStep;
 
-    // ENVIAR
+    // envia resposta
     await axios.post(
       `${API_URL}/message/sendText/${instance}`,
       {
         number,
-        text: response
+        text: next.message
       },
       {
         headers: {
@@ -128,18 +106,12 @@ app.post("/webhook", async (req, res) => {
     );
 
     res.sendStatus(200);
-
   } catch (err) {
     console.error(err);
     res.sendStatus(500);
   }
 });
 
-// LISTAR LEADS (já pronto pro dashboard)
-app.get("/leads", (req, res) => {
-  res.json(leads);
-});
-
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🔥 Revnex Core rodando");
+  console.log("🔥 Revnex Engine rodando");
 });
