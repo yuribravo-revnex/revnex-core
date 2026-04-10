@@ -11,6 +11,9 @@ const PORT = process.env.PORT || 3000;
 const EVOLUTION_URL = "https://evolution-api-production-a3c6.up.railway.app";
 const EVOLUTION_API_KEY = "302b7b6bca698a46e7347ecc0a82adb7dcc3ce255936799f5f2f9ee2922f1ac6";
 
+// 🔥 INSTÂNCIA FIXA (CORREÇÃO CRÍTICA)
+const INSTANCE_NAME = "cliente4";
+
 // =============================
 // HEALTH CHECK
 // =============================
@@ -30,7 +33,6 @@ app.post("/webhook", async (req, res) => {
 
     const message = data?.data?.message;
     const from = data?.data?.key?.remoteJid;
-    const instance = data?.instance?.instanceName;
 
     if (!message || !from) {
       console.log("⚠️ Dados inválidos");
@@ -50,12 +52,12 @@ app.post("/webhook", async (req, res) => {
 
     console.log("💬 Mensagem:", text);
     console.log("📱 De:", from);
-    console.log("🔗 Instância:", instance);
+    console.log("🔗 Instância:", INSTANCE_NAME);
 
     if (!text) return res.sendStatus(200);
 
     // =============================
-    // RESPOSTA AUTOMÁTICA
+    // LÓGICA DO BOT
     // =============================
     let resposta = "";
 
@@ -74,7 +76,7 @@ app.post("/webhook", async (req, res) => {
 
     console.log("📤 Enviando resposta...");
 
-    await fetch(`${EVOLUTION_URL}/message/sendText/${instance}`, {
+    await fetch(`${EVOLUTION_URL}/message/sendText/${INSTANCE_NAME}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
