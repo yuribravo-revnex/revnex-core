@@ -1,106 +1,101 @@
 import express from "express";
-import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
-const SUPABASE_URL = "https://sqiavxkqjalxeifxzsie.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaWF2eGtxamFseGVpZnh6c2llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjUxNDMsImV4cCI6MjA5MTQwMTE0M30.VTw0xeMueBbS1ZIPF_TZjcuqLLefhKy6L_aIRtuu2qQ";
+const PORT = process.env.PORT || 3000;
 
+// =============================
+// CONFIG
+// =============================
 const EVOLUTION_URL = "https://evolution-api-production-a3c6.up.railway.app";
 const EVOLUTION_API_KEY = "302b7b6bca698a46e7347ecc0a82adb7dcc3ce255936799f5f2f9ee2922f1ac6";
 
-// 🔥 Webhook principal
+// =============================
+// HEALTH CHECK
+// =============================
+app.get("/", (req, res) => {
+  res.send("🔥 Revnex Core rodando");
+});
+
+// =============================
+// WEBHOOK
+// =============================
 app.post("/webhook", async (req, res) => {
   try {
     const data = req.body;
 
-    const instance = data.instance || "default";
-    const messageData = data.data?.messages?.[0];
+    console.log("📩 WEBHOOK RECEBIDO:");
+    console.log(JSON.stringify(data, null, 2));
 
-    if (!messageData) return res.sendStatus(200);
+    const message = data?.data?.message;
+    const from = data?.data?.key?.remoteJid;
+    const instance = data?.instance?.instanceName;
 
-    const from = messageData.key.remoteJid;
-    const message = messageData.message?.conversation || "";
-
-    console.log("📩 Nova mensagem:", from, message);
-
-    // 🔹 1. Criar contato se não existir
-    let contact = await fetch(`${SUPABASE_URL}/rest/v1/contacts?phone=eq.${from}`, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      },
-    }).then(r => r.json());
-
-    if (!contact.length) {
-      contact = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          phone: from,
-          tenant_id: null,
-        }),
-      }).then(r => r.json());
+    if (!message || !from) {
+      console.log("⚠️ Dados inválidos");
+      return res.sendStatus(200);
     }
 
-    const contact_id = contact[0]?.id;
-
-    // 🔹 2. Salvar mensagem
-    await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contact_id,
-        tenant_id: null,
-        message,
-        direction: "in",
-      }),
-    });
-
-    // 🔥 3. Resposta dinâmica simples (base IA futura)
-    let reply = "Recebi sua mensagem 🚀";
-
-    if (message.toLowerCase().includes("oi")) {
-      reply = "Olá! Aqui é a Vitrin Veículos.\n\n1 - Comprar carro\n2 - Vender carro";
+    // ignora grupos
+    if (from.includes("@g.us")) {
+      console.log("⚠️ Grupo ignorado");
+      return res.sendStatus(200);
     }
 
-    if (message === "1") {
-      reply = "Qual faixa de valor você procura?";
+    const text =
+      message?.conversation ||
+      message?.extendedTextMessage?.text ||
+      "";
+
+    console.log("💬 Mensagem:", text);
+    console.log("📱 De:", from);
+    console.log("🔗 Instância:", instance);
+
+    if (!text) return res.sendStatus(200);
+
+    // =============================
+    // RESPOSTA AUTOMÁTICA
+    // =============================
+    let resposta = "";
+
+    if (text.toLowerCase() === "oi") {
+      resposta = `Olá! Aqui é a Vitrin Veículos.
+
+1 - Comprar carro
+2 - Vender carro`;
+    } else if (text === "1") {
+      resposta = "Qual faixa de valor você procura?";
+    } else if (text === "2") {
+      resposta = "Perfeito. Vamos anunciar seu veículo.";
+    } else {
+      resposta = "Digite 1 para comprar ou 2 para vender.";
     }
 
-    if (message.match(/\d/)) {
-      reply = "Perfeito. Um consultor vai falar com você 🚗";
-    }
+    console.log("📤 Enviando resposta...");
 
-    // 🔹 4. Enviar resposta
     await fetch(`${EVOLUTION_URL}/message/sendText/${instance}`, {
       method: "POST",
       headers: {
-        apikey: EVOLUTION_API_KEY,
         "Content-Type": "application/json",
+        apikey: EVOLUTION_API_KEY,
       },
       body: JSON.stringify({
-        number: from,
-        text: reply,
+        number: from.replace("@s.whatsapp.net", ""),
+        text: resposta,
       }),
     });
 
+    console.log("✅ Resposta enviada");
+
     res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ Erro:", err);
+  } catch (error) {
+    console.error("❌ ERRO:", error);
     res.sendStatus(500);
   }
 });
 
-app.listen(3000, () => {
-  console.log("🔥 Revnex Core rodando");
+// =============================
+app.listen(PORT, () => {
+  console.log(`🔥 Revnex Core rodando na porta ${PORT}`);
 });
