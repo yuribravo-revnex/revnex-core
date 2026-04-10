@@ -7,12 +7,16 @@ app.use(express.json());
 const API_URL = process.env.EVOLUTION_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 
-// 🔹 Health check
+// memória temporária (depois vira DB)
+const sessions = {};
+const leads = [];
+
+// ROOT
 app.get("/", (req, res) => {
-  res.send("Revnex Core ONLINE 🚀");
+  res.send("Revnex Core OK 🚀");
 });
 
-// 🔹 Criar instância
+// CRIAR INSTÂNCIA
 app.post("/create-instance", async (req, res) => {
   try {
     const { name } = req.body;
@@ -26,28 +30,6 @@ app.post("/create-instance", async (req, res) => {
       },
       {
         headers: {
-          apikey: API_KEY,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json(err.response?.data || err.message);
-  }
-});
-
-// 🔹 Buscar QR
-app.get("/qr/:name", async (req, res) => {
-  try {
-    const { name } = req.params;
-
-    const response = await axios.get(
-      `${API_URL}/instance/connect/${name}`,
-      {
-        headers: {
           apikey: API_KEY
         }
       }
@@ -55,62 +37,107 @@ app.get("/qr/:name", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
-    console.error(err.response?.data || err.message);
     res.status(500).json(err.response?.data || err.message);
   }
 });
 
-// 🔥 WEBHOOK PRINCIPAL (RECEBE + RESPONDE)
+// WEBHOOK
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("📩 Evento recebido:", JSON.stringify(req.body, null, 2));
-
     const data = req.body;
 
-    // 🔹 pega instance corretamente
-    const instance =
-      data.instance ||
-      data.instanceName ||
-      data.instance?.instanceName;
-
-    // 🔹 pega remetente
-    const from = data.data?.key?.remoteJid;
-
-    // 🔹 pega mensagem (texto simples + extended)
-    const message =
-      data.data?.message?.conversation ||
-      data.data?.message?.extendedTextMessage?.text;
-
-    // 🔹 ignora eventos inúteis
-    if (!message || !from || !instance) {
+    if (!data?.data?.key?.remoteJid) {
       return res.sendStatus(200);
     }
 
-    // 🔹 limpa número
-    const number = from.replace("@s.whatsapp.net", "");
+    const number = data.data.key.remoteJid;
+    const message = data.data.message?.conversation?.toLowerCase() || "";
+    const instance = data.instance;
 
-    console.log(`📨 ${number}: ${message}`);
+    console.log("📩", number, message);
 
-    // 🔥 RESPOSTA AUTOMÁTICA
+    // iniciar sessão
+    if (!sessions[number]) {
+      sessions[number] = { step: "start" };
+    }
+
+    const state = sessions[number];
+    let response = "";
+
+    // FLUXO
+    if (state.step === "start") {
+      response = `Olá! Aqui é a Vitrin Veículos.
+
+1 - Comprar carro
+2 - Vender carro
+3 - Atendente`;
+
+      state.step = "menu";
+    }
+
+    else if (state.step === "menu") {
+      if (message.includes("1")) {
+        response = "Qual faixa de valor?";
+        state.step = "buy";
+      } 
+      else if (message.includes("2")) {
+        response = "Qual carro você quer vender?";
+        state.step = "sell";
+      } 
+      else {
+        response = "Escolha 1, 2 ou 3";
+      }
+    }
+
+    else if (state.step === "buy") {
+      leads.push({
+        number,
+        interest: "buy",
+        message,
+        instance
+      });
+
+      response = "Perfeito. Um consultor vai falar com você 🚗";
+      state.step = "done";
+    }
+
+    else if (state.step === "sell") {
+      leads.push({
+        number,
+        interest: "sell",
+        message,
+        instance
+      });
+
+      response = "Recebido. Vamos te ajudar a vender 🚗";
+      state.step = "done";
+    }
+
+    // ENVIAR
     await axios.post(
       `${API_URL}/message/sendText/${instance}`,
       {
         number,
-        text: `Recebi: ${message} 🚀`
+        text: response
       },
       {
         headers: {
-          apikey: API_KEY,
-          "Content-Type": "application/json"
+          apikey: API_KEY
         }
       }
     );
 
     res.sendStatus(200);
+
   } catch (err) {
-    console.error("❌ Erro no webhook:", err.response?.data || err.message);
+    console.error(err);
     res.sendStatus(500);
   }
+});
+
+// LISTAR LEADS (já pronto pro dashboard)
+app.get("/leads", (req, res) => {
+  res.json(leads);
 });
 
 app.listen(process.env.PORT || 3000, () => {
